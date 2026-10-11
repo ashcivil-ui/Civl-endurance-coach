@@ -1,45 +1,54 @@
-name: Weekly Endurance Plan
+
+name: Weekly Training Plan
 
 on:
   schedule:
-    - cron: "0 18 * * 0"   # Every Sunday at 18:00 UK time
-  workflow_dispatch:       # Allows manual runs
+    - cron: "0 18 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
-  build:
+  generate-weekly-plan:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.10"
+          python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
-          pip install requests anthropic
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-      - name: Run Strava collector
-        env:
-          STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
-          STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
-          STRAVA_REFRESH_TOKEN: ${{ secrets.STRAVA_REFRESH_TOKEN }}
+      - name: Collect Strava data
         run: python strava_collector.py
 
-      - name: Run Intervals collector
-        env:
-          INTERVALS_API_KEY: ${{ secrets.INTERVALS_API_KEY }}
+      - name: Collect Intervals.icu data
         run: python intervals_collector.py
 
-      - name: Run Calendar collector
-        env:
-          CALENDAR_API_KEY: ${{ secrets.CALENDAR_API_KEY }}
-          CALENDAR_ID: ${{ secrets.CALENDAR_ID }}
+      - name: Collect calendar data
         run: python calendar_collector.py
 
-      - name: Generate weekly plan
-        env:
-          CLAUDE_API_KEY: ${{
+      - name: Generate weekly training plan
+        run: python generate_plan.py
+
+      - name: Commit weekly plan
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add weekly_plan.json
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Update weekly training plan"
+            git push
+          fi
