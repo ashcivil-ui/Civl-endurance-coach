@@ -2,8 +2,8 @@ name: Weekly Endurance Plan
 
 on:
   schedule:
-    - cron: "0 18 * * 0"   # Every Sunday at 18:00 UK time
-  workflow_dispatch:       # Allows manual runs
+    - cron: "0 18 * * 0"
+  workflow_dispatch:
 
 jobs:
   build:
@@ -11,7 +11,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v4
