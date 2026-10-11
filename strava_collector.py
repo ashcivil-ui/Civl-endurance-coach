@@ -1,37 +1,54 @@
-import requests
-import os
-import json
+name: Weekly Endurance Plan
 
-def get_strava_activities():
-    client_id = os.getenv("STRAVA_CLIENT_ID")
-    client_secret = os.getenv("STRAVA_CLIENT_SECRET")
-    refresh_token = os.getenv("STRAVA_REFRESH_TOKEN")
+on:
+  schedule:
+    - cron: "0 18 * * 0"
+  workflow_dispatch:
 
-    # Step 1: Refresh the access token
-    token_url = "https://www.strava.com/oauth/token"
-    payload = {
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "refresh_token": refresh_token,
-        "grant_type": "refresh_token"
-    }
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-    response = requests.post(token_url, data=payload)
-    response_data = response.json()
-    access_token = response_data["access_token"]
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-    # Step 2: Get activities
-    activities_url = "https://www.strava.com/api/v3/athlete/activities"
-    headers = {"Authorization": f"Bearer {access_token}"}
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
 
-    activities_response = requests.get(activities_url, headers=headers)
-    activities = activities_response.json()
+      - name: Install dependencies
+        run: |
+          pip install requests anthropic
 
-    # Save to file
-    with open("strava_data.json", "w") as f:
-        json.dump(activities, f, indent=2)
+      - name: Run Strava collector
+        env:
+          STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
+          STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
+          STRAVA_REFRESH_TOKEN: ${{ secrets.STRAVA_REFRESH_TOKEN }}
+        run: python strava_collector.py
 
-    print("Strava data collected successfully.")
+      - name: Run Intervals collector
+        env:
+          INTERVALS_API_KEY: ${{ secrets.INTERVALS_API_KEY }}
+        run: python intervals_collector.py
 
-if __name__ == "__main__":
-    get_strava_activities()
+      - name: Run Calendar collector
+        env:
+          CALENDAR_API_KEY: ${{ secrets.CALENDAR_API_KEY }}
+          CALENDAR_ID: ${{ secrets.CALENDAR_ID }}
+        run: python calendar_collector.py
+
+      - name: Generate weekly plan
+        env:
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+        run: python generate_plan.py
+
+      - name: Commit weekly plan
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add weekly_plan.json
+          git commit -m "Weekly plan update"
+          git push
