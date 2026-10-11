@@ -1,81 +1,60 @@
 
-import requests
-import os
-import json
+name: Weekly Endurance Plan
 
-def get_strava_activities():
-    client_id = os.getenv("STRAVA_CLIENT_ID")
-    client_secret = os.getenv("STRAVA_CLIENT_SECRET")
-    refresh_token = os.getenv("STRAVA_REFRESH_TOKEN")
+on:
+  schedule:
+    - cron: "0 18 * * 0"
+  workflow_dispatch:
 
-    # Check credentials are available
-    if not all([client_id, client_secret, refresh_token]):
-        raise RuntimeError(
-            "Missing Strava credentials. Check GitHub "
-            "Actions secrets and workflow environment."
-        )
+permissions:
+  contents: write
 
-    # Step 1: Refresh access token
-    token_url = "https://www.strava.com/oauth/token"
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-    payload = {
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "refresh_token": refresh_token,
-        "grant_type": "refresh_token"
-    }
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-    response = requests.post(
-        token_url,
-        data=payload,
-        timeout=30
-    )
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
 
-    if not response.ok:
-        raise RuntimeError(
-            f"Strava authentication failed "
-            f"(HTTP {response.status_code}). "
-            "Check client credentials and refresh token."
-        )
+      - name: Install dependencies
+        run: pip install requests anthropic
 
-    response_data = response.json()
-    access_token = response_data.get("access_token")
+      - name: Run Strava collector
+        env:
+          STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
+          STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
+          STRAVA_REFRESH_TOKEN: ${{ secrets.STRAVA_REFRESH_TOKEN }}
+        run: python strava_collector.py
 
-    if not access_token:
-        raise RuntimeError(
-            "Strava did not return an access token."
-        )
+      - name: Run Intervals collector
+        env:
+          INTERVALS_API_KEY: ${{ secrets.INTERVALS_API_KEY }}
+          INTERVALS_ATHLETE_ID: ${{ secrets.INTERVALS_ATHLETE_ID }}
+        run: python intervals_collector.py
 
-    print("Strava authentication successful.")
+      - name: Run Calendar collector
+        env:
+          CALENDAR_API_KEY: ${{ secrets.CALENDAR_API_KEY }}
+          CALENDAR_ID: ${{ secrets.CALENDAR_ID }}
+        run: python calendar_collector.py
 
-    # Step 2: Fetch activities
-    activities_url = (
-        "https://www.strava.com/api/v3/athlete/activities"
-    )
+      - name: Generate weekly plan
+        env:
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+        run: python generate_plan.py
 
-    headers = {
-        "Authorization": f"Bearer {access_token}"
-    }
-
-    activities_response = requests.get(
-        activities_url,
-        headers=headers,
-        params={"per_page": 100},
-        timeout=30
-    )
-
-    activities_response.raise_for_status()
-    activities = activities_response.json()
-
-    # Step 3: Save activities
-    with open("strava_data.json", "w") as f:
-        json.dump(activities, f, indent=2)
-
-    print(
-        f"Strava data collected successfully. "
-        f"Retrieved {len(activities)} activities."
-    )
-
-if __name__ == "__main__":
-    get_strava_activities()
-
+      - name: Commit weekly plan
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add weekly_plan.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Weekly plan update"
+            git push
+          fi
