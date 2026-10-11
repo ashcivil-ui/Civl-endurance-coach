@@ -3,19 +3,20 @@ import requests
 import os
 import json
 
+
 def get_strava_activities():
     client_id = os.getenv("STRAVA_CLIENT_ID")
     client_secret = os.getenv("STRAVA_CLIENT_SECRET")
     refresh_token = os.getenv("STRAVA_REFRESH_TOKEN")
 
-    # Check credentials are available
+    # Step 1: Check credentials
     if not all([client_id, client_secret, refresh_token]):
         raise RuntimeError(
             "Missing Strava credentials. Check GitHub "
             "Actions secrets and workflow environment."
         )
 
-    # Step 1: Refresh access token
+    # Step 2: Refresh access token
     token_url = "https://www.strava.com/oauth/token"
 
     payload = {
@@ -48,7 +49,7 @@ def get_strava_activities():
 
     print("Strava authentication successful.")
 
-    # Step 2: Fetch activities
+    # Step 3: Fetch activities
     activities_url = (
         "https://www.strava.com/api/v3/athlete/activities"
     )
@@ -67,7 +68,12 @@ def get_strava_activities():
     activities_response.raise_for_status()
     activities = activities_response.json()
 
-    # Step 3: Save activities
+    if not isinstance(activities, list):
+        raise RuntimeError(
+            "Strava returned an unexpected activities response."
+        )
+
+    # Step 4: Save activities
     with open("strava_data.json", "w") as f:
         json.dump(activities, f, indent=2)
 
@@ -75,6 +81,7 @@ def get_strava_activities():
         f"Strava data collected successfully. "
         f"Retrieved {len(activities)} activities."
     )
+
 
 if __name__ == "__main__":
     get_strava_activities()
